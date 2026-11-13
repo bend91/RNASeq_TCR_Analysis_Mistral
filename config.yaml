@@ -1,0 +1,72 @@
+# ---------------------------------------------------------------------------
+# Paired scRNA-seq + TCR-seq pipeline configuration
+# ---------------------------------------------------------------------------
+
+data:
+  # Directory containing one sub-directory (or .h5 file) per sample, named by sample_id
+  scrna_dir: data/scrna
+  scrna_format: mtx            # "mtx" (10x matrix.mtx/barcodes/features dir) or "h5" (10x filtered_feature_bc_matrix.h5)
+  # Directory containing one TCR file per sample, named <sample_id>.tsv / .csv
+  tcr_dir: data/tcr
+  tcr_format: airr             # "airr" (AIRR rearrangement .tsv) or "tenx" (cellranger filtered_contig_annotations.csv)
+  # Sample sheet with columns: sample_id, patient, treatment, tissue
+  sample_metadata: data/sample_metadata.csv
+  genome: GRCh38
+
+qc:
+  min_genes: 200
+  max_genes: 6000
+  min_counts: 500
+  max_pct_mito: 15.0
+  doublet_detection: true      # requires scrublet; skipped with a warning if unavailable
+
+integration:
+  method: pca                  # "pca" (fast, no batch correction) or "scvi" (sample as batch)
+  n_top_genes: 3000
+  n_pcs: 30
+  n_neighbors: 15
+  scvi_max_epochs: 200         # cap for smoke tests; increase (e.g. 400) for real data
+  batch_key: sample
+
+annotation:
+  cluster_res: 1.0
+  t_cell_only: true            # keep only cells with a TCR or CD3D expression
+  cd3_gene: CD3D
+  # Gene signatures used for cell-state scoring and phenotype assignment.
+  # Genes absent from the panel are silently ignored.
+  signatures:
+    Naive:        [CCR7, SELL, TCF7, LEF1, IL7R, ACTN1]
+    Central_mem:  [CCR7, SELL, IL7R, GPR183]
+    Effector_mem: [GZMK, GZMA, CCL5, CCL4, EOMES, CXCR3]
+    Cytotoxic:    [GZMB, PRF1, NKG7, GNLY, FGFBP2, KLRD1, SPON2]
+    Exhausted:    [PDCD1, TIGIT, LAG3, HAVCR2, TOX, LAYN, CXCL13, ENTPD1]
+    Treg:         [FOXP3, IL2RA, CTLA4, IKZF2, TIGIT]
+    Proliferating: [MKI67, TOP2A, STMN1, TYMS]
+    Tfh:          [CXCR5, BCL6, PDCD1, CD200, IL21]
+
+tcr:
+  clonotype_metric: identity   # "identity" (exact CDR3 aa) or "levenshtein"/"tcrdist" via define_clonotype_clusters
+  clonotype_distance_key: tcrdist   # distance key for cluster-based clonotypes / network
+  expansion_bins: [1, 2, 5]    # clonal_expansion bins (clones >1 cell, >2, >5)
+
+enrichment:
+  group_key: treatment         # biological contrast variable (treatments)
+  patient_key: patient         # unit of replication for statistics
+  tissue_key: tissue           # LN vs tumour
+  min_clonotype_cells: 3       # clonotypes with fewer total cells are not tested
+  min_patients_expressing: 1   # clonotype must appear in >= this many patients in the group
+  top_n: 20                    # top clonotypes per group phenotyped in detail
+  fdr_alpha: 0.25              # BH alpha ( exploratory; tighten for confirmatory)
+
+phenotype:
+  signature_key: sig_scores    # obsm key holding signature scores
+  state_key: cell_state        # obs column with assigned cell-state labels
+
+trafficking:
+  ln_label: LN
+  tumor_label: tumor
+  expansion_fold: 2.0          # log2FC threshold for "expanded in tumour" shared clones
+
+output:
+  results_dir: results
+  figures: true
